@@ -12,6 +12,7 @@ interface MandalaChartProps {
   activeSubGoalId: number | null; // 現在アクティブなブロックのサブゴールID
   onCellClick: (cellInfo: CellInfo) => void;
   onActionToggle: (actionId: number) => void;
+  onActionCellClick: (actionId: number) => void; // STEP4ダイアログ用
 }
 
 export function MandalaChart({
@@ -19,6 +20,7 @@ export function MandalaChart({
   activeSubGoalId,
   onCellClick,
   onActionToggle,
+  onActionCellClick,
 }: MandalaChartProps) {
   // グリッド座標は静的なので一度だけ計算する（メモ化）
   const cellGrid = useMemo(() => buildCellGrid(), []);
@@ -41,8 +43,10 @@ export function MandalaChart({
             goal={goal}
             activeSubGoalId={activeSubGoalId}
             currentStep={goal.current_step}
+            allActions={goal.actions}
             onCellClick={onCellClick}
             onActionToggle={onActionToggle}
+            onActionCellClick={onActionCellClick}
           />
         ))}
       </div>

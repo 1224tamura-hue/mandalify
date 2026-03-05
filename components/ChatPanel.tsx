@@ -14,8 +14,10 @@ interface ChatPanelProps {
   input: string;
   isLoading: boolean;
   currentStep: number;
+  isStep3AllSet: boolean; // 全アクション設定完了フラグ
   onInputChange: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
+  onStep3Confirm: () => void; // 「確認しました」クイック返信
 }
 
 // STEPラベルの定義
@@ -39,8 +41,10 @@ export function ChatPanel({
   input,
   isLoading,
   currentStep,
+  isStep3AllSet,
   onInputChange,
   onSubmit,
+  onStep3Confirm,
 }: ChatPanelProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -111,6 +115,16 @@ export function ChatPanel({
 
       {/* 入力エリア */}
       <form onSubmit={onSubmit} className="p-3 border-t shrink-0">
+        {/* STEP3完了時のクイック返信ボタン */}
+        {currentStep === 3 && isStep3AllSet && !isLoading && (
+          <button
+            type="button"
+            onClick={onStep3Confirm}
+            className="w-full mb-2 py-2 text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+          >
+            確認しました → STEP4へ進む
+          </button>
+        )}
         <div className="flex gap-2">
           <Textarea
             value={input}
@@ -125,7 +139,7 @@ export function ChatPanel({
             className="resize-none"
             onKeyDown={(e) => {
               // Enterキーで送信（Shift+Enterは改行）
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 if (input.trim() && !isLoading) {
                   onSubmit(e as unknown as React.FormEvent);

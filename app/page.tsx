@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, UIMessage } from "ai";
-import { Goal, CellInfo } from "@/lib/types";
+import { Goal, CellInfo, Action } from "@/lib/types";
 import {
   loadGoals,
   saveGoal,
@@ -15,6 +15,8 @@ import {
 import { MandalaChart } from "@/components/MandalaChart";
 import { ChatPanel } from "@/components/ChatPanel";
 import { GoalDashboard } from "@/components/GoalDashboard";
+import { ActionDetailDialog } from "@/components/ActionDetailDialog";
+import { ActivityHeatmap } from "@/components/ActivityHeatmap";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -80,12 +82,22 @@ export default function Home() {
   const [activeSubGoalId, setActiveSubGoalId] = useState<number | null>(null);
   // TOP3アクションのID一覧（STEP4で表示）
   const [top3Actions, setTop3Actions] = useState<number[]>([]);
+  // ActionDetailDialogで選択中のアクションID（null=閉じている）
+  const [selectedActionId, setSelectedActionId] = useState<number | null>(null);
+  // STEP3で全アクションが揃ったフラグ（クイック返信ボタン表示用）
+  const [isStep3AllSet, setIsStep3AllSet] = useState(false);
   // 初期化完了フラグ（SSRとのズレを防ぐ）
   const [isInitialized, setIsInitialized] = useState(false);
 
   // 常に最新のゴールデータをtransportのbodyで参照できるようRefで保持
   const currentGoalRef = useRef(currentGoal);
   currentGoalRef.current = currentGoal;
+
+  // STEP3完了トリガーを一度だけ実行するためのRef
+  const hasTriggeredStep3CompleteRef = useRef(false);
+
+  // setMessages 呼び出し時に最新の messages を参照するためのRef（deps汚染回避）
+  const messagesRef = useRef<UIMessage[]>([]);
 
   // AI SDK v6: DefaultChatTransportを一度だけ生成（bodyはRefで動的に読む）
   const transport = useMemo(
@@ -124,6 +136,38 @@ export default function Home() {
 
   const isLoading = status === "streaming" || status === "submitted";
 
+  // messagesRef を常に最新に保つ
+  messagesRef.current = messages;
+
+  // STEP3: 全8サブゴールのアクションが揃ったらAIメッセージとして確認依頼を挿入する
+  useEffect(() => {
+    if (currentGoal.current_step !== 3) return;
+    if (isLoading) return;
+    if (hasTriggeredStep3CompleteRef.current) return;
+
+    const allSet = [0, 1, 2, 3, 4, 5, 6, 7].every(
+      (id) => currentGoal.actions.filter((a) => a.sub_goal_id === id).length >= 8
+    );
+
+    if (allSet) {
+      hasTriggeredStep3CompleteRef.current = true;
+      setIsStep3AllSet(true);
+      // ユーザー発言ではなくAIメッセージとして挿入する
+      const completionNotice: UIMessage = {
+        id: `step3-complete-${Date.now()}`,
+        role: "assistant",
+        parts: [
+          {
+            type: "text",
+            text: "全8サブゴールのアクションが揃いました！チャートの内容を確認してください。\n\n問題なければ「確認しました」と送信してください。STEP4（完成フェーズ）へ進みます。",
+          },
+        ],
+        metadata: undefined,
+      };
+      setMessages([...messagesRef.current, completionNotice]);
+    }
+  }, [currentGoal.actions, currentGoal.current_step, isLoading, setMessages]);
+
   // 初期化: localStorageからゴールをロード
   useEffect(() => {
     const goals = loadGoals();
@@ -133,6 +177,16 @@ export default function Home() {
       setCurrentGoal(goals[0]);
       // チャット履歴をUIMessage形式で復元
       setMessages(chatHistoryToUIMessages(goals[0].chat_history));
+      // 既にSTEP3完了状態でロードした場合は再挿入しない
+      if (
+        goals[0].current_step === 3 &&
+        [0, 1, 2, 3, 4, 5, 6, 7].every(
+          (id) => goals[0].actions.filter((a) => a.sub_goal_id === id).length >= 8
+        )
+      ) {
+        hasTriggeredStep3CompleteRef.current = true;
+        setIsStep3AllSet(true);
+      }
     } else {
       // 初回起動: 新規ゴールを作成
       const newGoal = createNewGoal();
@@ -196,19 +250,66 @@ export default function Home() {
     [input, isLoading, sendMessage]
   );
 
-  // アクションの完了状態をトグルする
+  // アクションの完了状態をトグルする（completed_at も更新）
   const handleActionToggle = useCallback((actionId: number) => {
     setCurrentGoal((prev) => {
       const updated: Goal = {
         ...prev,
-        actions: prev.actions.map((a) =>
-          a.id === actionId ? { ...a, completed: !a.completed } : a
-        ),
+        actions: prev.actions.map((a) => {
+          if (a.id !== actionId) return a;
+          const nowCompleted = !a.completed;
+          return {
+            ...a,
+            completed: nowCompleted,
+            completed_at: nowCompleted ? new Date().toISOString() : undefined,
+          };
+        }),
       };
       if (updated.id) saveGoal(updated);
       return updated;
     });
   }, []);
+
+  // STEP3完了確認: ユーザーが「確認しました」ボタンを押したとき
+  const handleStep3Confirm = useCallback(() => {
+    sendMessage({ text: "確認しました。STEP4に進んでください。" });
+  }, [sendMessage]);
+
+  // STEP4のアクションセルクリック: ダイアログを開く
+  const handleActionCellClick = useCallback((actionId: number) => {
+    setSelectedActionId((prev) => (prev === actionId ? null : actionId));
+  }, []);
+
+  // ActionDetailDialogからのアクション更新
+  const handleUpdateActionMeta = useCallback(
+    (updates: Partial<Pick<Action, "priority" | "due_date" | "completed">>) => {
+      if (selectedActionId === null) return;
+      const actionId = selectedActionId;
+      setCurrentGoal((prev) => {
+        const updated: Goal = {
+          ...prev,
+          actions: prev.actions.map((a) => {
+            if (a.id !== actionId) return a;
+            const nowCompleted =
+              updates.completed !== undefined ? updates.completed : a.completed;
+            return {
+              ...a,
+              ...updates,
+              completed_at:
+                updates.completed !== undefined
+                  ? nowCompleted
+                    ? new Date().toISOString()
+                    : undefined
+                  : a.completed_at,
+            };
+          }),
+        };
+        if (updated.id) saveGoal(updated);
+        return updated;
+      });
+    },
+    [selectedActionId]
+  );
 
   // サブゴールセルをクリックしたらアクティブブロックを変更
   const handleCellClick = useCallback((cellInfo: CellInfo) => {
@@ -228,6 +329,8 @@ export default function Home() {
     setTop3Actions([]);
     setActiveSubGoalId(null);
     setIsDashboardOpen(false);
+    setIsStep3AllSet(false);
+    hasTriggeredStep3CompleteRef.current = false;
   }, [setMessages]);
 
   // 過去のゴールを選択して表示
@@ -237,6 +340,8 @@ export default function Home() {
       setMessages(chatHistoryToUIMessages(goal.chat_history));
       setTop3Actions([]);
       setActiveSubGoalId(null);
+      setIsStep3AllSet(false);
+      hasTriggeredStep3CompleteRef.current = false;
     },
     [setMessages]
   );
@@ -304,8 +409,10 @@ export default function Home() {
             input={input}
             isLoading={isLoading}
             currentStep={displayGoal.current_step}
+            isStep3AllSet={isStep3AllSet}
             onInputChange={setInput}
             onSubmit={handleSubmit}
+            onStep3Confirm={handleStep3Confirm}
           />
         </div>
 
@@ -316,6 +423,7 @@ export default function Home() {
             activeSubGoalId={activeSubGoalId}
             onCellClick={handleCellClick}
             onActionToggle={handleActionToggle}
+            onActionCellClick={handleActionCellClick}
           />
 
           {/* STEP4: TOP3アクション表示 */}
@@ -370,6 +478,14 @@ export default function Home() {
                 {displayGoal.actions.length}
               </div>
             )}
+
+          {/* 達成カレンダー */}
+          {displayGoal.current_step === 4 &&
+            displayGoal.actions.length > 0 && (
+              <div className="mt-3 p-4 bg-white rounded-xl border shadow-sm overflow-x-auto">
+                <ActivityHeatmap actions={displayGoal.actions} />
+              </div>
+            )}
         </div>
       </div>
 
@@ -389,8 +505,10 @@ export default function Home() {
               input={input}
               isLoading={isLoading}
               currentStep={displayGoal.current_step}
+              isStep3AllSet={isStep3AllSet}
               onInputChange={setInput}
               onSubmit={handleSubmit}
+              onStep3Confirm={handleStep3Confirm}
             />
           </TabsContent>
           <TabsContent
@@ -402,7 +520,16 @@ export default function Home() {
               activeSubGoalId={activeSubGoalId}
               onCellClick={handleCellClick}
               onActionToggle={handleActionToggle}
+              onActionCellClick={handleActionCellClick}
             />
+            {/* モバイル: 達成カレンダー */}
+            {displayGoal.current_step === 4 &&
+              displayGoal.actions.length > 0 && (
+                <div className="mt-3 p-3 bg-white rounded-xl border shadow-sm overflow-x-auto">
+                  <ActivityHeatmap actions={displayGoal.actions} />
+                </div>
+              )}
+
             {/* モバイルでもTOP3表示 */}
             {displayGoal.current_step === 4 && top3Actions.length > 0 && (
               <div className="mt-3 p-3 bg-white rounded-xl border shadow-sm">
@@ -446,6 +573,14 @@ export default function Home() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* アクション詳細ダイアログ */}
+      <ActionDetailDialog
+        action={displayGoal.actions.find((a) => a.id === selectedActionId)}
+        isOpen={selectedActionId !== null}
+        onClose={() => setSelectedActionId(null)}
+        onUpdate={handleUpdateActionMeta}
+      />
 
       {/* 過去チャート一覧ダッシュボード */}
       <GoalDashboard

@@ -12,6 +12,9 @@ export interface Action {
   sub_goal_id: number; // 親サブゴールID 0-7
   text: string;
   completed: boolean;
+  priority?: "high" | "medium" | "low"; // 優先度
+  due_date?: string; // 期限 "YYYY-MM-DD"
+  completed_at?: string; // 完了日時 ISO8601
 }
 
 // チャットメッセージ

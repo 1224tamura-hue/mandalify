@@ -132,6 +132,15 @@ export default function Home() {
         handleAIActionRef.current(action);
       }
     },
+    onError: () => {
+      const errorMsg: UIMessage = {
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        parts: [{ type: "text", text: "通信エラーが発生しました。もう一度お試しください。" }],
+        metadata: undefined,
+      };
+      setMessages([...messagesRef.current, errorMsg]);
+    },
   });
 
   const isLoading = status === "streaming" || status === "submitted";

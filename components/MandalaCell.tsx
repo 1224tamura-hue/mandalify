@@ -31,6 +31,7 @@ export function MandalaCell({
   currentStep,
   allActions,
   onCellClick,
+  onActionToggle,
   onActionCellClick,
 }: MandalaCellProps) {
   const { type, dataId, subGoalId } = cellInfo;
@@ -107,9 +108,13 @@ export function MandalaCell({
     <div
       className={cellClassName}
       onClick={() => {
-        // STEP4かつアクションセルの場合はダイアログを開く
-        if (type === "action" && dataId !== undefined && currentStep === 4) {
-          onActionCellClick(dataId);
+        if (type === "action" && dataId !== undefined) {
+          // STEP4はダイアログを開く、それ以外は完了トグル
+          if (currentStep === 4) {
+            onActionCellClick(dataId);
+          } else {
+            onActionToggle(dataId);
+          }
         } else {
           onCellClick(cellInfo);
         }

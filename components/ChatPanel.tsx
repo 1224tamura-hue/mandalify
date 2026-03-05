@@ -131,10 +131,10 @@ export function ChatPanel({
             onChange={(e) => onInputChange(e.target.value)}
             placeholder={
               currentStep === 4
-                ? "チャートが完成しました！"
+                ? "AIにアクションについて相談できます"
                 : "メッセージを入力... (Enter で送信)"
             }
-            disabled={isLoading || currentStep === 4}
+            disabled={isLoading}
             rows={2}
             className="resize-none"
             onKeyDown={(e) => {
@@ -149,7 +149,7 @@ export function ChatPanel({
           />
           <Button
             type="submit"
-            disabled={isLoading || !input.trim() || currentStep === 4}
+            disabled={isLoading || !input.trim()}
             className="self-end bg-indigo-600 hover:bg-indigo-700"
           >
             送信

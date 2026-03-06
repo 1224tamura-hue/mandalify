@@ -114,7 +114,7 @@ export function ChatPanel({
       </ScrollArea>
 
       {/* 入力エリア */}
-      <form onSubmit={onSubmit} className="p-3 border-t shrink-0">
+      <form onSubmit={onSubmit} className="px-3 pt-3 pb-safe border-t shrink-0">
         {/* STEP3完了時のクイック返信ボタン */}
         {currentStep === 3 && isStep3AllSet && !isLoading && (
           <button

@@ -379,9 +379,9 @@ export default function Home() {
   const displayGoal = currentGoal;
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
+    <div className="h-dvh flex flex-col bg-gray-50">
       {/* ヘッダー */}
-      <header className="border-b px-4 py-3 flex items-center justify-between bg-white shadow-sm shrink-0">
+      <header className="border-b px-4 pt-safe pb-3 flex items-center justify-between bg-white shadow-sm shrink-0">
         <div className="flex items-center gap-2">
           <h1 className="text-xl font-bold text-indigo-600">mandalify</h1>
           <span className="text-xs text-gray-400 hidden sm:block">

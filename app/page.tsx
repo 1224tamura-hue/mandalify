@@ -132,7 +132,8 @@ export default function Home() {
         handleAIActionRef.current(action);
       }
     },
-    onError: () => {
+    onError: (err) => {
+      console.error("[mandalify] Chat error:", err);
       const errorMsg: UIMessage = {
         id: `error-${Date.now()}`,
         role: "assistant",

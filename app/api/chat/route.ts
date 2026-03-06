@@ -150,18 +150,26 @@ ${subGoalsText}
 }
 
 export async function POST(req: Request) {
-  const { messages, currentStep, goalData } = await req.json();
+  try {
+    const { messages, currentStep, goalData } = await req.json();
 
-  // AI SDK v6: UIMessage[] を ModelMessage[] に変換してから streamText に渡す
-  const modelMessages = await convertToModelMessages(messages as UIMessage[]);
+    // AI SDK v6: UIMessage[] を ModelMessage[] に変換してから streamText に渡す
+    const modelMessages = await convertToModelMessages(messages as UIMessage[]);
 
-  // Claude APIにストリーミングリクエストを送信
-  const result = streamText({
-    model: anthropic("claude-sonnet-4-6"),
-    system: buildSystemPrompt(currentStep ?? 1, goalData ?? {}),
-    messages: modelMessages,
-  });
+    // Claude APIにストリーミングリクエストを送信
+    const result = streamText({
+      model: anthropic("claude-sonnet-4-6"),
+      system: buildSystemPrompt(currentStep ?? 1, goalData ?? {}),
+      messages: modelMessages,
+    });
 
-  // AI SDK v6: UIMessageStreamResponse として返す
-  return result.toUIMessageStreamResponse();
+    // AI SDK v6: UIMessageStreamResponse として返す
+    return result.toUIMessageStreamResponse();
+  } catch (err) {
+    console.error("[mandalify] API route error:", err);
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 }
